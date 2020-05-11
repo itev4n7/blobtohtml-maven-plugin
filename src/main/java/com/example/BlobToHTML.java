@@ -38,30 +38,49 @@ public class BlobToHTML extends AbstractMojo {
     public void execute() throws MojoExecutionException, MojoFailureException {
         getLog().info("try create conn");
         try (Connection conn = DriverManager.getConnection(url, username, password)) {
-            if (conn != null) {
-                getLog().info("try to get rows");
-                int rowsDB = getRowsDB(conn);
-                getLog().info("try to get resource path");
-                String path = project.getBuild().getOutputDirectory() + "/tableDB.html";
-                ContainerTag html = table().attr("align='center'")
-                          .with(tr().with(th(h3("id"))).with(th(h3("photo"))));
-                for (int id = 1; id <= rowsDB; id++) {
-                    String selectSQL = String.format("select photo from savedPhotos where id=%d;", id);
-                    try (PreparedStatement pstmt = conn.prepareStatement(selectSQL);
-                         ResultSet rs = pstmt.executeQuery()) {
-                        while (rs.next()) {
-                            String binary = "data:image/png;base64," +
-                                      Base64.getEncoder().encodeToString(rs.getBytes("photo"));
-                            html.with(tr().with(td(h3(String.valueOf(id)))).with(td(img().withSrc(binary))));
-                        }
-                    } catch (SQLException e) {
-                        getLog().error(e.getMessage());
-                    }
-                }
-                writeHtml(path, html);
-            }
+            getLog().info("try to get resource path");
+            String path = project.getBuild().getTestSourceDirectory() + "/tableDB.html";
+            getLog().info("create html table");
+            ContainerTag html = createHtmlTable();
+            getLog().info("try to write html report");
+            htmlPhotoReport(conn, html);
+            getLog().info("try to save html report, path=" + path);
+            writeHtml(path, html);
+            dropDBTable(conn);
         } catch (SQLException e) {
             getLog().error(e.getMessage());
+        }
+    }
+
+    private void dropDBTable(Connection conn) {
+        getLog().info("try to drop table");
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("drop table savedPhotos;");
+        } catch (SQLException e) {
+            getLog().error(e.getMessage());
+        }
+    }
+
+    private ContainerTag createHtmlTable() {
+        return table().attr("align='center'").with(tr().with(th(h3("id"))).with(th(h3("photo"))));
+    }
+
+    private String createPhotoInBase64(ResultSet rs) throws SQLException {
+        return "data:image/png;base64," + Base64.getEncoder().encodeToString(rs.getBytes("photo"));
+    }
+
+    private void htmlPhotoReport(Connection conn, ContainerTag html) {
+        for (int id = 1; id < getDBRows(conn); id++) {
+            String selectSQL = String.format("select photo from savedPhotos where id=%d;", id);
+            try (PreparedStatement pstmt = conn.prepareStatement(selectSQL);
+                 ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String binary = createPhotoInBase64(rs);
+                    html.with(tr().with(td(h3(String.valueOf(id)))).with(td(img().withSrc(binary))));
+                }
+            } catch (SQLException e) {
+                getLog().error(e.getMessage());
+            }
         }
     }
 
@@ -74,7 +93,7 @@ public class BlobToHTML extends AbstractMojo {
         }
     }
 
-    private int getRowsDB(Connection conn) {
+    private int getDBRows(Connection conn) {
         try (Statement stmt = conn.createStatement()) {
             ResultSet resultSet = stmt.executeQuery("select count(*) from savedPhotos;");
             resultSet.next();
