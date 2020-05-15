@@ -39,7 +39,7 @@ public class BlobToHTML extends AbstractMojo {
             ContainerTag html = Base64Creator.createHtmlTable();
             ReportTable.writeHtmlPhotoReport(conn, html);
             HtmlFileCreator.saveHtml(path, html);
-            DataBase.dropDBTable(conn);
+            Database.dropDBTable(conn);
         } catch (SQLException e) {
             getLog().error(e.getMessage());
         }
